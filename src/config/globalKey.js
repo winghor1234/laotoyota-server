@@ -1,0 +1,12 @@
+import dotenv from "dotenv";
+dotenv.config();
+const PORT = process.env.PORT;
+const SECREAT_KEY = process.env.SECREAT_KEY;
+const SECREAT_KEY_REFRESH = process.env.SECREAT_KEY_REFRESH;
+const CLOUDINARY_NAME = process.env.CLOUDINARY_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+export {
+    PORT, SECREAT_KEY, SECREAT_KEY_REFRESH, CLOUDINARY_API_KEY, 
+    CLOUDINARY_NAME, CLOUDINARY_API_SECRET
+}

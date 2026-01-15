@@ -1,0 +1,216 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  user_id         String        @id @default(uuid()) @db.VarChar(36)
+  customer_number String
+  username        String
+  email           String?
+  phoneNumber     Int           @unique
+  password        String
+  role            String
+  profile         String?
+  point           Int
+  province        String
+  district        String
+  village         String
+  deviceToken     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  GiftHistory     GiftHistory[]
+  Card            Card[]
+  Car             Car[]
+  booking         Booking[]
+  Employee        Employee[]
+}
+
+model Employee {
+  employee_id   String   @id @default(uuid()) @db.VarChar(36)
+  employee_code String
+  employee_name String
+  position      String
+  branchId      String   @db.VarChar(36)
+  branch        Branch   @relation(fields: [branchId], references: [branch_id])
+  userId        String   @db.VarChar(36)
+  user          User     @relation(fields: [userId], references: [user_id])
+  createBy      String?  @db.VarChar(36)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Branch {
+  branch_id   String     @id @default(uuid()) @db.VarChar(36)
+  branch_code String
+  branch_name String
+  location    String
+  phone       String?
+  createBy    String?    @db.VarChar(36)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  Employee    Employee[]
+  bookings    Booking[]
+  times       Time[]
+}
+
+model Promotion {
+  promotion_id String   @id @default(uuid()) @db.VarChar(36)
+  title        String
+  detail       String   @db.Text
+  image        String
+  createBy     String?  @db.VarChar(36)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Service {
+  service_id     String          @id @default(uuid()) @db.VarChar(36)
+  serviceName    String
+  description    String
+  image          String
+  createBy       String?         @db.VarChar(36)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  bookingDetails BookingDetail[]
+}
+
+model GiftCard {
+  giftcard_id String        @id @default(uuid()) @db.VarChar(36)
+  name        String
+  amount      Int // add
+  point       Int
+  image       String
+  status      Boolean       @default(true)
+  createBy    String?       @db.VarChar(36)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  GiftHistory GiftHistory[]
+}
+
+model GiftHistory {
+  gifthistory_id String   @id @default(uuid()) @db.VarChar(36)
+  userId         String   @db.VarChar(36)
+  user           User     @relation(fields: [userId], references: [user_id])
+  giftcardId     String   @db.VarChar(36)
+  giftcard       GiftCard @relation(fields: [giftcardId], references: [giftcard_id])
+  amount         Int
+  status         Boolean  @default(true) // 1 ລາງວັນ 2 ສະຖານະ 3 ປະຫວັດ 
+  createBy       String?  @db.VarChar(36)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Card {
+  card_id         String   @id @default(uuid()) @db.VarChar(36)
+  userId          String   @db.VarChar(36)
+  user            User     @relation(fields: [userId], references: [user_id])
+  customer_number String
+  card_number     String
+  vip_number      String
+  discount        Int
+  createBy        String?  @db.VarChar(36)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Car {
+  car_id       String    @id @default(uuid()) @db.VarChar(36)
+  userId       String    @db.VarChar(36)
+  user         User      @relation(fields: [userId], references: [user_id])
+  model        String
+  frameNumber  String
+  engineNumber String
+  plateNumber  String
+  province     String
+  color        String?
+  createBy     String?   @db.VarChar(36)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  booking      Booking[]
+}
+
+model Time {
+  time_id    String    @id @default(uuid()) @db.VarChar(36)
+  time       String
+  date       String
+  zoneId     String    @db.VarChar(36)
+  zone       Zone      @relation(fields: [zoneId], references: [zone_id])
+  timeStatus Boolean   @default(true)
+  createBy   String?   @db.VarChar(36)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  booking    Booking[]
+  branch     Branch?   @relation(fields: [branchId], references: [branch_id])
+  branchId   String?   @db.VarChar(36)
+}
+
+model Zone {
+  zone_id    String   @id @default(uuid()) @db.VarChar(36)
+  zoneName   String
+  timeFix    String
+  zoneStatus Boolean
+  createBy   String?  @db.VarChar(36)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  Fix        Fix[]
+  Time       Time[]
+}
+
+model Booking {
+  booking_id     String          @id @default(uuid()) @db.VarChar(36)
+  userId         String          @db.VarChar(36)
+  user           User            @relation(fields: [userId], references: [user_id])
+  carId          String          @db.VarChar(36)
+  car            Car             @relation(fields: [carId], references: [car_id])
+  timeId         String          @db.VarChar(36)
+  time           Time            @relation(fields: [timeId], references: [time_id])
+  remark         String
+  code           String?
+  bookingStatus  String          @default("await")
+  branchId       String          @db.VarChar(36)
+  branch         Branch          @relation(fields: [branchId], references: [branch_id])
+  createBy       String?         @db.VarChar(36)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  Fix            Fix[]
+  bookingDetails BookingDetail[]
+}
+
+model BookingDetail {
+  booking_detail_id String   @id @default(uuid()) @db.VarChar(36)
+  bookingId         String   @db.VarChar(36)
+  booking           Booking  @relation(fields: [bookingId], references: [booking_id])
+  serviceId         String   @db.VarChar(36)
+  service           Service  @relation(fields: [serviceId], references: [service_id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Fix {
+  fix_id       String   @id @default(uuid()) @db.VarChar(36)
+  zoneId       String   @db.VarChar(36)
+  zone         Zone     @relation(fields: [zoneId], references: [zone_id])
+  bookingId    String   @db.VarChar(36)
+  booking      Booking  @relation(fields: [bookingId], references: [booking_id])
+  detailFix    String?
+  kmLast       Int?
+  kmNext       Int?
+  fixCarPrice  Int?
+  carPartPrice Int?
+  totalPrice   Int?
+  fixStatus    String   @default("padding")
+  createBy     String?  @db.VarChar(36)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
