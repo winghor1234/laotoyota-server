@@ -139,7 +139,6 @@ export default class TimeController {
         try {
             const time_id = req.params.time_id;
             const { timeStatus } = req.body;
-            // console.log("timeID" ,req.body);
             const validate = await ValidateData({ timeStatus });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));

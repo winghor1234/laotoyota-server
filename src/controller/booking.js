@@ -229,18 +229,21 @@ export default class BookingController {
             const booking_id = req.params.booking_id;
             const employee = req.employee;
             await FindOneBooking(booking_id);
-            const { timeId, carId, serviceId, remark, branchId } = req.body;
-            const validate = await ValidateData({ timeId, carId, serviceId, remark, branchId });
+            // const { timeId, carId, serviceId, remark, branchId } = req.body;
+            const { timeId, carId,  remark, branchId } = req.body;
+            console.log("body of update booking:",req.body);
+            // const validate = await ValidateData({ timeId, carId, serviceId, remark, branchId });
+            const validate = await ValidateData({ timeId, carId,  remark, branchId });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));
             }
             await FindOneBranch(branchId);
             await FindOneTime(timeId);
             await FindOneCar(carId); // ສ້າງຢູ່ service
-            await FindOneService(serviceId) // ສ້າງຢູ່ service
+            // await FindOneService(serviceId) // ສ້າງຢູ່ service
             const data = await prisma.booking.update({
                 data: {
-                    timeId: timeId, carId: carId, serviceId: serviceId, remark, branchId, createBy: employee,
+                    timeId: timeId, carId: carId, remark, branchId, createBy: employee,
                 },
                 where: {
                     booking_id: booking_id

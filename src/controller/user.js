@@ -94,7 +94,7 @@ export default class UserController {
             const user = await FindByPhoneNumber(phoneNumber); // ສ້າງໃນ service
             if (!user) return SendError(res, 404, EMessage.NotFound);
 
-            if (user.role === Role.general ) {
+            if (user.role === Role.general) {
                 return SendError(res, 400, EMessage.BadRequest);
             }
             const decryptPassword = await DecryptData(user.password);
@@ -139,6 +139,44 @@ export default class UserController {
                     village,
                     customer_number: randow.toString(),
                     role: Role.general,
+                    point: 0,
+                    email: email ?? null
+                }
+            })
+            data.password = undefined;
+            data.role = undefined;
+            return SendCreate(res, SMessage.Register, data)
+        } catch (error) {
+            console.log(error);
+            return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async RegisterAdmin(req, res) {
+        try {
+            const { username, phoneNumber, password, province, district, village, email } = req.body;
+            // console.log(req.body);
+            const validate = await ValidateData({
+                username, phoneNumber,
+                password, province, district, village
+            });
+
+            if (validate.length > 0) {
+                return SendError(res, 400, EMessage.BadRequest, validate.join(','))
+            }
+            const checkPhoneNumber = await CheckPhoneNumber(phoneNumber); // ສ້າງຢູ່ service
+            if (!checkPhoneNumber) return SendError(res, 404, EMessage.NotFound)
+            const generatePassword = await EncryptData(password)
+            const randow = "LTS" + `${Math.floor(Math.random() * (100 - 1 + 1)) + 1}`;
+            const data = await prisma.user.create({
+                data: {
+                    username,
+                    phoneNumber: parseInt(phoneNumber),
+                    password: generatePassword,
+                    province,
+                    district,
+                    village,
+                    customer_number: randow.toString(),
+                    role: Role.admin,
                     point: 0,
                     email: email ?? null
                 }
@@ -210,7 +248,7 @@ export default class UserController {
     static async UpdateUser(req, res) {
         try {
             const user_id = req.user; // ມາຈາກ token 
-            console.log(req.body);
+            // console.log(req.body);
             const { username, email, province, district, village, removeImage } = req.body;
             const validate = await ValidateData({ username, province, district, village });
             if (validate.length > 0) {

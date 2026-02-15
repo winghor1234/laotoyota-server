@@ -10,13 +10,14 @@ import CardController from "../controller/card.js"
 import CarController from "../controller/car.js"
 import BookingController from "../controller/booking.js"
 import FixController from '../controller/fix.js';
-import { auth, authAdmin, authSuperAdmin, authAdminOrSuperAdmin } from '../middleware/auth.js'
+import { auth, authSuperAdmin, authAdminOrSuperAdmin } from '../middleware/auth.js'
 import BookingDetailController from '../controller/bookingDetail.js';
 import EmployeeController from '../controller/employee.js';
 import BranchController from '../controller/branch.js';
 const router = express.Router();
 //----- User----
 router.post("/user/register", UserController.Register);
+router.post("/user/registerAdmin", auth, authSuperAdmin, UserController.RegisterAdmin);
 router.post("/user/login", UserController.Login);
 router.post("/user/loginAdmin", UserController.LoginAdmin);
 

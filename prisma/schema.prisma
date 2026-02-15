@@ -126,8 +126,8 @@ model Card {
 
 model Car {
   car_id       String    @id @default(uuid()) @db.VarChar(36)
-  userId       String    @db.VarChar(36)
-  user         User      @relation(fields: [userId], references: [user_id])
+  userId       String?    @db.VarChar(36)
+  user         User?      @relation(fields: [userId], references: [user_id])
   model        String
   frameNumber  String
   engineNumber String

@@ -28,7 +28,7 @@ export default class PromotionController {
     static async Insert(req, res) {
         try {
             const { title, detail } = req.body;
-            console.log("req.body:", req.body);
+            // console.log("req.body:", req.body);
             const validate = await ValidateData({ title, detail });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));
