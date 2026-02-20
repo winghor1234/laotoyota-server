@@ -23,6 +23,38 @@ export default class ZoneController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
+    static async getAllZone(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['zoneName'],
+                    search
+                );
+            const zone = await prisma.zone.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!zone) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.zone.count({ where: query }),
+                page,
+                limit,
+                data: zone
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 

@@ -25,7 +25,38 @@ export default class UserController {
         }
     }
 
-    //add new
+    static async getAllUser(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['phoneNumber', 'username'],
+                    search
+                );
+            const user = await prisma.user.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!user) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.user.count({ where: query }),
+                page,
+                limit,
+                data: user
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 

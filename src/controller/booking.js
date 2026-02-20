@@ -45,7 +45,7 @@ export default class BookingController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
-    static async getAll(req, res) {
+    static async getAllBooking(req, res) {
         try {
             const {
                 page = 1,

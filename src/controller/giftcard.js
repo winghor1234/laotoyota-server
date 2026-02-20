@@ -4,6 +4,47 @@ import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
 export default class GiftCardController {
+    static async getAllGiftCard(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+                startDate,
+                endDate,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['name'],
+                    search
+                );
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const giftcard = await prisma.giftCard.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!giftcard) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.giftCard.count({ where: query }),
+                page,
+                limit,
+                data: giftcard
+            }
+
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 
@@ -43,7 +84,7 @@ export default class GiftCardController {
 
             const data = await prisma.giftCard.create({
                 data: {
-                    name, point: parseInt(point), amount: parseInt(amount), image: img_url,createBy: req.employee
+                    name, point: parseInt(point), amount: parseInt(amount), image: img_url, createBy: req.employee
                 }
             })
             return SendCreate(res, SMessage.Insert, data);
@@ -73,7 +114,7 @@ export default class GiftCardController {
 
             const data = await prisma.giftCard.update({
                 where: {
-                    giftcard_id: giftcard_id,createBy: req.employee
+                    giftcard_id: giftcard_id, createBy: req.employee
                 },
                 data: {
                     name, point: parseInt(point), ...(img_url && { image: img_url })
@@ -96,7 +137,7 @@ export default class GiftCardController {
 
             const data = await prisma.giftCard.update({
                 data: {
-                    status: giftcardStatusBoolean,createBy: req.employee
+                    status: giftcardStatusBoolean, createBy: req.employee
                 }, where: { giftcard_id: giftcard_id }
             });
             return SendSuccess(res, SMessage.Update, data);

@@ -23,6 +23,41 @@ export default class FixController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
+    static async getAllFix(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+                startDate,
+                endDate,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['fixName'],
+                    search
+                );
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const fix = await prisma.fix.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!fix) return SendError(res, 404, EMessage.NotFound);
+            return SendSuccess(res, SMessage.SelectAll, fix);
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 

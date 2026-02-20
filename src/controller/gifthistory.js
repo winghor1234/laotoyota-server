@@ -5,6 +5,50 @@ import prisma from "../config/prima.js";
 import { FindOneUser, FindOneGiftCard, FindOneGiftHistory } from "../service/service.js";
 
 export default class GiftHistoryController {
+    static async getAllGifthistory(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+                startDate,
+                endDate,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['name'],
+                    search
+                );
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const giftHistory = await prisma.giftHistory.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+                include: {
+                    user: true,
+                    giftcard: true
+                }
+            });
+            if (!giftHistory) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.giftHistory.count({ where: query }),
+                page,
+                limit,
+                data: giftHistory
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
             

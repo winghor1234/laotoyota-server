@@ -4,6 +4,38 @@ import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
 export default class ServiceController {
+    static async getAllService(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['serviceName', 'description'],
+                    search
+                );
+            const service = await prisma.service.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!service) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.service.count({ where: query }),
+                page,
+                limit,
+                data: service
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 
@@ -43,7 +75,7 @@ export default class ServiceController {
 
             const data = await prisma.service.create({
                 data: {
-                    serviceName, description, image: img_url,createBy: req.user
+                    serviceName, description, image: img_url, createBy: req.user
                 }
             })
             return SendCreate(res, SMessage.Insert, data);

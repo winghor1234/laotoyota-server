@@ -23,6 +23,38 @@ export default class TimeController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
+    static async getAllTime(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['time', 'date'],
+                    search
+                );
+            const time = await prisma.time.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!time) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.time.count({ where: query }),
+                page,
+                limit,
+                data: time
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
             const data = await prisma.time.findMany({

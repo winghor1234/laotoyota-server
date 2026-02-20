@@ -25,6 +25,54 @@ export default class CarController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
+    static async getAllCar(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 2,
+                search,
+                startDate,
+                endDate,
+            } = req.query;
+
+            const query = {};
+
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['frameNumber', 'plateNumber'],
+                    search
+                );
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+
+            const pageNum = parseInt(page) || 1;
+            const limitNum = parseInt(limit) || 2;
+
+            const car = await prisma.car.findMany({
+                where: query,
+                orderBy: { createdAt: 'desc' },
+                skip: (pageNum - 1) * limitNum,
+                take: limitNum,
+            });
+
+            const total = await prisma.car.count({ where: query });
+            const totalPage = Math.ceil(total / limitNum);
+
+            return SendSuccess(res, SMessage.SelectAll, {
+                car,
+                total,
+                totalPage,
+                currentPage: pageNum
+            });
+
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 
@@ -121,7 +169,7 @@ export default class CarController {
             if (userId === 'null' || userId === '') {
                 userId = null;
             }
-            const validate = await ValidateData({  model, frameNumber, engineNumber, plateNumber, province, color });
+            const validate = await ValidateData({ model, frameNumber, engineNumber, plateNumber, province, color });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));
             }

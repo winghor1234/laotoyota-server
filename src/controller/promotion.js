@@ -4,6 +4,38 @@ import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
 export default class PromotionController {
+    static async getAllPromotion(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['title', 'detail'],
+                    search
+                );
+            const promotion = await prisma.promotion.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!promotion) return SendError(res, 404, EMessage.NotFound);
+            return {
+                total: await prisma.promotion.count({ where: query }),
+                page,
+                limit,
+                data: promotion
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 
@@ -44,7 +76,7 @@ export default class PromotionController {
 
             const data = await prisma.promotion.create({
                 data: {
-                    title, detail, image: img_url , createBy: req.employee
+                    title, detail, image: img_url, createBy: req.employee
                 }
             })
             console.log("data promotion:", data);
@@ -57,7 +89,7 @@ export default class PromotionController {
     static async UpdatePromotion(req, res) {
         try {
             const promotion_id = req.params.promotion_id;
-            
+
             const { title, detail } = req.body;
             const validate = await ValidateData({ title, detail });
             if (validate.length > 0) {
@@ -92,7 +124,7 @@ export default class PromotionController {
     static async DeletePromotion(req, res) {
         try {
             const promotion_id = req.params.promotion_id;
-            
+
             const data = await prisma.promotion.delete({ where: { promotion_id: promotion_id } })
             if (!data) return SendError(res, 404, EMessage.EDelete);
             return SendSuccess(res, SMessage.Delete)

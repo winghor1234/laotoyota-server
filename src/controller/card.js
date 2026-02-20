@@ -5,6 +5,48 @@ import prisma from "../config/prima.js";
 import { FindOneUser } from "../service/service.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
 export default class CardController {
+    static async getAllCard(req, res) {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                search,
+                startDate,
+                endDate,
+            } = req.query;
+            const query = {};
+            if (search)
+                query['OR'] = getSearchQuery(
+                    ['customer_number', 'card_number', 'vip_number'],
+                    search
+                );
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const card = await prisma.card.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (page - 1) * limit,
+                take: limit,
+            });
+            if (!card) return SendError(res, 404, EMessage.NotFound);
+            return SendSuccess(res, SMessage.GetAll, card, page, limit);
+            function getSearchQuery(columns, search) {
+                const searchQuery = {};
+                columns.forEach(column => {
+                    searchQuery[column] = { contains: search };
+                });
+                return searchQuery;
+            }
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
     static async SelectAll(req, res) {
         try {
 
