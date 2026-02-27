@@ -4,6 +4,7 @@ import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneTime, FindOneUser, FindOneService, FindOneCar, FindOneBooking, FindOneBranch } from "../service/service.js";
 import NotificationController from "./notification.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class BookingController {
     static async SearchBooking(req, res) {
         try {
@@ -14,7 +15,6 @@ export default class BookingController {
                     car: true,
                     user: true,
                     time: true,
-
                     branch: true
 
                 },
@@ -47,19 +47,13 @@ export default class BookingController {
     }
     static async getAllBooking(req, res) {
         try {
-            const {
-                page = 1,
-                limit = 10,
-                search,
-                startDate,
-                endDate,
-            } = matchedData(req);
+            const { page = 1, limit = 10, search, startDate, endDate, } = matchedData(req);
             const query = {};
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['code', 'bookingStatus'],
-                    search
-                );
+                query['OR'] = [
+                    { code: { contains: search } },
+                    { bookingStatus: { contains: search } },
+                ];
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
@@ -68,18 +62,52 @@ export default class BookingController {
             }
 
 
-            const employee = await prisma.booking.findMany({
+            const data = await prisma.booking.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
-            const count = await prisma.employee.count({ where: query });
-            return SendSuccess(res, SMessage.SelectAll, { employee, count })
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const count = await prisma.booking.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
         } catch (error) {
-            console.log(`employee/getAll error: ${error}`);
+            return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async getAllBookingByBranch(req, res) {
+        try {
+            const branchId = req.params.branch_id;
+            const { page = 1, limit = 10, search, startDate, endDate } = matchedData(req);
+            const query = { branchId: branchId };
+            if (search)
+                query['OR'] = [
+                    { code: { contains: search } },
+                    { bookingStatus: { contains: search } },
+                ];
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+
+            const data = await prisma.booking.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
+            });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const count = await prisma.booking.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
+        } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
         }
     }
@@ -124,7 +152,7 @@ export default class BookingController {
             const branchId = req.params.branch_id;
             // console.log("Branch ID in Controller:", branchId);
             const data = await prisma.booking.findMany({
-                where: { branchId: branchId }, 
+                where: { branchId: branchId },
                 include: {
                     car: true,
                     time: true,
@@ -230,10 +258,10 @@ export default class BookingController {
             const employee = req.employee;
             await FindOneBooking(booking_id);
             // const { timeId, carId, serviceId, remark, branchId } = req.body;
-            const { timeId, carId,  remark, branchId } = req.body;
-            console.log("body of update booking:",req.body);
+            const { timeId, carId, remark, branchId } = req.body;
+            console.log("body of update booking:", req.body);
             // const validate = await ValidateData({ timeId, carId, serviceId, remark, branchId });
-            const validate = await ValidateData({ timeId, carId,  remark, branchId });
+            const validate = await ValidateData({ timeId, carId, remark, branchId });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));
             }
@@ -308,6 +336,55 @@ export default class BookingController {
             return SendSuccess(res, SMessage.Delete, data)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    // report.controller.js
+
+    static async exportBooking(req, res) {
+        try {
+            const { startDate, endDate } = req.query
+            //  console.log(startDate, endDate);
+            // รอผลลัพธ์จาก Prisma
+            const data = await prisma.booking.findMany({
+                where: {
+                    createdAt: {
+                        gte: new Date(startDate),
+                        lte: new Date(endDate),
+                    },
+                },
+                orderBy: { createdAt: "desc" },
+                include: {
+                    user: true,
+                    branch: true,
+                    car: true,
+                    time: true,
+                },
+            });
+
+            if (!data.length) {
+                return SendError(res, 404, "No data found for this date range");
+            }
+            // console.log("Booking data:", data);
+            const exportData = data.map(item => ({
+                userName: item.user?.username , 
+                phoneNumber: item.user?.phoneNumber,
+                branchName: item.branch?.branch_name,
+                carModel: item.car?.model,
+                plateNumber: item.car?.plateNumber,
+                date: item.time?.date,
+                time: item.time?.time,
+            }));
+
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Booking Report",
+                columns: ReportColumns.booking,
+                data: exportData,
+                fileName: "booking-report.xlsx",
+            });
+
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

@@ -16,13 +16,15 @@ export default class BranchController {
                 search,
                 startDate,
                 endDate,
-            } = matchedData(req); 
+            } = matchedData(req);
             const query = {};
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['branch_code', 'branch_name','location'],
-                    search
-                );
+                query['OR'] = [
+                    { branch_name: { contains: search } },
+                    { location: { contains: search } },
+                    { branch_code: { contains: search } },
+                ];
+
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
@@ -30,25 +32,24 @@ export default class BranchController {
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
 
-          
-            const branch = await prisma.branch.findMany({
+
+            const data = await prisma.branch.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             const count = await prisma.branch.count({ where: query });
-            return SendSuccess(res,SMessage.SelectAll,{branch,count})
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data, totalPage })
         } catch (error) {
-            console.log(`branch/getAll error: ${error}`);
-        
-            return SendError(res,500,EMessage.ServerInternal,error)
+            return SendError(res, 500, EMessage.ServerInternal, error)
         }
     }
 
-   
+
     static async SelectAll(req, res) {
         try {
 

@@ -27,47 +27,35 @@ export default class CarController {
     }
     static async getAllCar(req, res) {
         try {
-            const {
-                page = 1,
-                limit = 2,
-                search,
-                startDate,
-                endDate,
-            } = req.query;
-
+            const { page = 1, limit = 10, search, startDate, endDate } = req.query;
             const query = {};
 
-            if (search)
-                query['OR'] = getSearchQuery(
-                    ['frameNumber', 'plateNumber'],
-                    search
-                );
+            if (search) {
+                // query.OR = getSearchQuery(['frameNumber', 'plateNumber'], search.trim());
+                query['OR'] = [
+                    { frameNumber: { contains: search } },
+                    { plateNumber: { contains: search } },
+                    { model: { contains: search } },
+                    { engineNumber: { contains: search } },
+                ];
+            }
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
                 if (startDate) query['createdAt']['gte'] = new Date(startDate);
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
-
-            const pageNum = parseInt(page) || 1;
-            const limitNum = parseInt(limit) || 2;
-
-            const car = await prisma.car.findMany({
+            const data = await prisma.car.findMany({
                 where: query,
                 orderBy: { createdAt: 'desc' },
-                skip: (pageNum - 1) * limitNum,
-                take: limitNum,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
 
-            const total = await prisma.car.count({ where: query });
-            const totalPage = Math.ceil(total / limitNum);
-
-            return SendSuccess(res, SMessage.SelectAll, {
-                car,
-                total,
-                totalPage,
-                currentPage: pageNum
-            });
+            const count = await prisma.car.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
 
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);

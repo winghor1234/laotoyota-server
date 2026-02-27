@@ -107,6 +107,8 @@ router.get("/booking/selByUser", auth, BookingController.SelectByUser);
 router.get("/booking/selByBranch/:branch_id", auth, authAdminOrSuperAdmin, BookingController.SelectByBranch);
 router.get("/booking/selByStatus", auth, BookingController.SelectBy);
 router.get("/booking/getAll", auth, BookingController.getAllBooking);
+router.get("/booking/getAllByBranch", auth, BookingController.getAllBookingByBranch);
+router.get("/booking/export", auth, BookingController.exportBooking)
 router.post("/booking/insert", auth, BookingController.Insert);
 router.put("/booking/update/:booking_id", auth, BookingController.Updatebooking);
 router.put("/booking/updateStatus/:booking_id", auth, authAdminOrSuperAdmin, BookingController.UpdateBookingStatus);
