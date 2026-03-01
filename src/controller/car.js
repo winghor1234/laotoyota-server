@@ -3,6 +3,8 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneUser } from "../service/service.js";
+import { matchedData } from "express-validator";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class CarController {
     static async SearchCar(req, res) {
         try {
@@ -27,7 +29,8 @@ export default class CarController {
     }
     static async getAllCar(req, res) {
         try {
-            const { page = 1, limit = 10, search, startDate, endDate } = req.query;
+            const { page = 1, limit = 2, search, startDate, endDate } = req.query;
+            // const { page = 1, limit = 2, search, startDate, endDate } = matchedData(req);
             const query = {};
 
             if (search) {
@@ -45,20 +48,24 @@ export default class CarController {
                 if (startDate) query['createdAt']['gte'] = new Date(startDate);
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
-            const data = await prisma.car.findMany({
+            const car = await prisma.car.findMany({
                 where: query,
                 orderBy: { createdAt: 'desc' },
                 skip: (parseInt(page) - 1) * parseInt(limit),
                 take: parseInt(limit),
+                include: {
+                    user: true,
+                },
             });
-            if (!data) return SendError(res, 404, EMessage.NotFound);
+            if (!car) return SendError(res, 404, EMessage.NotFound);
+            console.log("Fetching Page:", page, "Skip:", (page - 1) * limit);
 
             const count = await prisma.car.count({ where: query });
             const totalPage = Math.ceil(count / parseInt(limit));
-            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
+            return SendSuccess(res, SMessage.SelectAll, { data: car, totalPage });
 
         } catch (error) {
-            return SendError(res, 500, EMessage.ServerInternal, error);
+            return SendError(res, 500, EMessage.ServerInternal, error)
         }
     }
     static async SelectAll(req, res) {
@@ -231,6 +238,36 @@ export default class CarController {
         } catch (error) {
             console.log(error);
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportCar(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.car.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                FrameNumber: item.frameNumber,
+                PlateNumber: item.plateNumber,
+                Model: item.model,
+                EngineNumber: item.engineNumber,
+                Province: item.province,
+                Color: item.color,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Car Report",
+                columns: ReportColumns.car,
+                data: exportData,
+                fileName: "car-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

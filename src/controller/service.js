@@ -3,6 +3,7 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class ServiceController {
     static async getAllService(req, res) {
         try {
@@ -12,26 +13,27 @@ export default class ServiceController {
                 search,
             } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['serviceName', 'description'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['serviceName', 'description'],
-                    search
-                );
+                query['OR'] = [
+                    { serviceName: { contains: search } },
+                ];
             const service = await prisma.service.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             if (!service) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.service.count({ where: query }),
-                page,
-                limit,
-                data: service
-            }
+            const count = await prisma.service.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: service, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
@@ -131,6 +133,32 @@ export default class ServiceController {
             return SendSuccess(res, SMessage.Delete)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportService(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.service.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                ServiceName: item.serviceName,
+                Description: item.description,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Service Report",
+                columns: ReportColumns.service,
+                data: exportData,
+                fileName: "service-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

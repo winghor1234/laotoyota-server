@@ -3,6 +3,7 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneTime } from "../service/service.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class ZoneController {
     static async SearchZone(req, res) {
         try {
@@ -31,26 +32,27 @@ export default class ZoneController {
                 search,
             } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['zoneName'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['zoneName'],
-                    search
-                );
+                query['OR'] = [
+                    { zoneName: { contains: search } },
+                ];
             const zone = await prisma.zone.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             if (!zone) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.zone.count({ where: query }),
-                page,
-                limit,
-                data: zone
-            }
+            const count = await prisma.zone.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: zone, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
@@ -169,6 +171,33 @@ export default class ZoneController {
             return SendSuccess(res, SMessage.Delete)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportZone(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.zone.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                ZoneName: item.zoneName,
+                TimeFix: item.timeFix,
+                ZoneStatus: item.zoneStatus
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Zone Report",
+                columns: ReportColumns.zone,
+                data: exportData,
+                fileName: "zone-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

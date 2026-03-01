@@ -3,9 +3,10 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneUser, FindOneGiftCard, FindOneGiftHistory } from "../service/service.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 
 export default class GiftHistoryController {
-    static async getAllGifthistory(req, res) {
+    static async getAllGiftHistory(req, res) {
         try {
             const {
                 page = 1,
@@ -14,12 +15,19 @@ export default class GiftHistoryController {
                 startDate,
                 endDate,
             } = req.query;
+            console.log("req.query:", req.query);
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['name'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['name'],
-                    search
-                );
+                query['OR'] = [
+                    { user: { username: { contains: search } } },
+                    { giftcard: { name: { contains: search } } },
+                ];
+
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
@@ -31,27 +39,24 @@ export default class GiftHistoryController {
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
                 include: {
                     user: true,
                     giftcard: true
                 }
             });
             if (!giftHistory) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.giftHistory.count({ where: query }),
-                page,
-                limit,
-                data: giftHistory
-            }
+            const count = await prisma.giftHistory.count({ where: query });
+            const totalPage = Math.ceil(count / limit);
+            return SendSuccess(res, SMessage.SelectAll, { data: giftHistory, totalPage });
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
     static async SelectAll(req, res) {
         try {
-            
+
             const data = await prisma.giftHistory.findMany({
                 include: {
                     user: true,
@@ -67,7 +72,7 @@ export default class GiftHistoryController {
     static async SelectOne(req, res) {
         try {
             const gifthistory_id = req.params.gifthistory_id;
-            
+
             const data = await prisma.giftHistory.findFirst(
                 {
                     include: {
@@ -84,7 +89,7 @@ export default class GiftHistoryController {
     }
     static async Insert(req, res) {
         try {
-            
+
             const { userId, giftcardId, amount } = req.body;
             const validate = await ValidateData({ userId, giftcardId, amount });
             if (validate.length > 0) {
@@ -124,7 +129,7 @@ export default class GiftHistoryController {
     static async UpdateGifthistory(req, res) {
         try {
             const gifthistory_id = req.params.gifthistory_id;
-            
+
             const { giftcardId, amount, } = req.body;
             const validate = await ValidateData({ giftcardId, amount });
             if (validate.length > 0) {
@@ -163,7 +168,7 @@ export default class GiftHistoryController {
                 }
             });
             if (!data) return SendError(res, 404, EMessage.EUpdate);
-            return SendSuccess(res, SMessage.Update,data)
+            return SendSuccess(res, SMessage.Update, data)
         } catch (error) {
             console.log(error);
             return SendError(res, 500, EMessage.ServerInternal, error)
@@ -173,12 +178,39 @@ export default class GiftHistoryController {
     static async DeleteGifthistory(req, res) {
         try {
             const gifthistory_id = req.params.gifthistory_id;
-            
+
             const data = await prisma.giftHistory.delete({ where: { gifthistory_id: gifthistory_id } })
             if (!data) return SendError(res, 404, EMessage.EDelete);
-            return SendSuccess(res, SMessage.Delete,data)
+            return SendSuccess(res, SMessage.Delete, data)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportGiftHistory(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.giftHistory.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                CustomerName: item.user.username,
+                giftCard: item.giftcard.name,
+                amount: item.amount,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "GiftHistory Report",
+                columns: ReportColumns.giftHistory,
+                data: exportData,
+                fileName: "giftHistory-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

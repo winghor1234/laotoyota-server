@@ -47,33 +47,43 @@ export default class BookingController {
     }
     static async getAllBooking(req, res) {
         try {
-            const { page = 1, limit = 10, search, startDate, endDate, } = matchedData(req);
+            const { page = 1, limit = 10, search, startDate, endDate, status } = req.query;
+            // console.log("req.query:", req.query);
             const query = {};
-            if (search)
+            if (search) 
                 query['OR'] = [
-                    { code: { contains: search } },
-                    { bookingStatus: { contains: search } },
+                    { car: { plateNumber: { contains: search } } },
+                    { car: { frameNumber: { contains: search } } },
+                    
                 ];
+            
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
                 if (startDate) query['createdAt']['gte'] = new Date(startDate);
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
-
-
-            const data = await prisma.booking.findMany({
+            if (status) {
+                query['bookingStatus'] = status;
+            }
+            const booking = await prisma.booking.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
                 skip: (parseInt(page) - 1) * parseInt(limit),
                 take: parseInt(limit),
+                include: {
+                    car: true,
+                    time: true,
+                    user: true,
+                    branch: true,
+                },
             });
-            if (!data) return SendError(res, 404, EMessage.NotFound);
+            if (!booking) return SendError(res, 404, EMessage.NotFound);
             const count = await prisma.booking.count({ where: query });
             const totalPage = Math.ceil(count / parseInt(limit));
-            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
+            return SendSuccess(res, SMessage.SelectAll, { data: booking, totalPage });
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
         }
@@ -81,7 +91,8 @@ export default class BookingController {
     static async getAllBookingByBranch(req, res) {
         try {
             const branchId = req.params.branch_id;
-            const { page = 1, limit = 10, search, startDate, endDate } = matchedData(req);
+            // const { page = 1, limit = 10, search, startDate, endDate } = matchedData(req);
+            const { page = 1, limit = 10, search, startDate, endDate } = req.query;
             const query = { branchId: branchId };
             if (search)
                 query['OR'] = [
@@ -344,7 +355,6 @@ export default class BookingController {
         try {
             const { startDate, endDate } = req.query
             //  console.log(startDate, endDate);
-            // รอผลลัพธ์จาก Prisma
             const data = await prisma.booking.findMany({
                 where: {
                     createdAt: {
@@ -366,7 +376,7 @@ export default class BookingController {
             }
             // console.log("Booking data:", data);
             const exportData = data.map(item => ({
-                userName: item.user?.username , 
+                userName: item.user?.username,
                 phoneNumber: item.user?.phoneNumber,
                 branchName: item.branch?.branch_name,
                 carModel: item.car?.model,

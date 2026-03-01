@@ -3,6 +3,7 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class TimeController {
     static async SearchTime(req, res) {
         try {
@@ -31,26 +32,32 @@ export default class TimeController {
                 search,
             } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['time', 'date'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['time', 'date'],
-                    search
-                );
+                query['OR'] = [
+                    { time: { contains: search } },
+                    { date: { contains: search } },
+                ];
             const time = await prisma.time.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
+                include: {
+                    zone: true,
+                    branch: true
+                }
             });
             if (!time) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.time.count({ where: query }),
-                page,
-                limit,
-                data: time
-            }
+            const count = await prisma.time.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: time, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
@@ -58,7 +65,7 @@ export default class TimeController {
     static async SelectAll(req, res) {
         try {
             const data = await prisma.time.findMany({
-               include: {
+                include: {
                     zone: true, branch: true
                 }
             });
@@ -74,7 +81,7 @@ export default class TimeController {
 
             const data = await prisma.time.findFirst({
                 where: { time_id: time_id },
-               include: {
+                include: {
                     zone: true, branch: true
                 }
             });
@@ -88,7 +95,7 @@ export default class TimeController {
         try {
             const zoneId = req.params.zoneId
             const data = await prisma.time.findMany({
-                where: { zoneId },include: {
+                where: { zoneId }, include: {
                     zone: true, branch: true
                 }
             },);
@@ -200,6 +207,35 @@ export default class TimeController {
             return SendSuccess(res, SMessage.Delete)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportTime(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.time.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                Time: item.time,
+                Date: item.date,
+                Zone: item.zone.name,
+                Branch: item.branch.name,
+                TimeStatus: item.timeStatus
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Time Report",
+                columns: ReportColumns.time,
+                data: exportData,
+                fileName: "time-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

@@ -5,6 +5,7 @@ import { ValidateData } from "../service/validate.js";
 import { CheckPhoneNumber, DecryptData, EncryptData, FindByPhoneNumber, GenerateToken, VerifyRefreshToken, FindOneUser } from "../service/service.js";
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 
 export default class UserController {
     static async SearchUser(req, res) {
@@ -31,28 +32,47 @@ export default class UserController {
                 page = 1,
                 limit = 10,
                 search,
+                startDate,
+                endDate,
+                status
             } = req.query;
             const query = {};
-            if (search)
-                query['OR'] = getSearchQuery(
-                    ['phoneNumber', 'username'],
-                    search
-                );
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['phoneNumber', 'username'],
+            //         search
+            //     );
+            if (search) {
+                query.OR = [
+                    { username: { contains: search } },
+                    ...(!isNaN(search)
+                        ? [{ phoneNumber: Number(search) }]
+                        : [])
+                ];
+            }
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+
+            if (status) {
+                query.role = status;
+            }
+
             const user = await prisma.user.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             if (!user) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.user.count({ where: query }),
-                page,
-                limit,
-                data: user
-            }
+            const count = await prisma.user.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: user, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
@@ -426,5 +446,106 @@ export default class UserController {
         }
 
     }
+    static async ExportCustomer(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {
+                role: {
+                    in: ["general"]
+                }
+            };
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.user.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                Name: item.username,
+                PhoneNumber: item.phoneNumber,
+                Province: item.province,
+                District: item.district,
+                Village: item.village,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Customer Report",
+                columns: ReportColumns.customer,
+                data: exportData,
+                fileName: "customer-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
+    static async ExportEmployee(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.employee.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                Name: item.employee_name,
+                Position: item.position,
+                Branch: item.branch.branch_name,
+                PhoneNumber: item.user.phoneNumber,
+                Province: item.user.province,
+                District: item.user.district,
+                Village: item.user.village,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Employee Report",
+                columns: ReportColumns.employee,
+                data: exportData,
+                fileName: "employee-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
+    static async ExportAdmin(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {
+                role: {
+                    in: ["admin"]
+                }
+            };
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.user.findMany({
+                where: query
+            });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                Name: item.username,
+                PhoneNumber: item.phoneNumber,
+                Province: item.province,
+                District: item.district,
+                Village: item.village,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Admin Report",
+                columns: ReportColumns.admin,
+                data: exportData,
+                fileName: "admin-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
+
+
 
 }

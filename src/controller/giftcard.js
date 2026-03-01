@@ -3,6 +3,7 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class GiftCardController {
     static async getAllGiftCard(req, res) {
         try {
@@ -14,11 +15,15 @@ export default class GiftCardController {
                 endDate,
             } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['name'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['name'],
-                    search
-                );
+                query['OR'] = [
+                    { name: { contains: search } },
+                ];
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
@@ -30,16 +35,13 @@ export default class GiftCardController {
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             if (!giftcard) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.giftCard.count({ where: query }),
-                page,
-                limit,
-                data: giftcard
-            }
+            const count = await prisma.giftCard.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: giftcard, totalPage })
 
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
@@ -154,6 +156,33 @@ export default class GiftCardController {
             return SendSuccess(res, SMessage.Delete, data)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportGiftCard(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.giftCard.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                name: item.name,
+                point: item.point,
+                amount: item.amount,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "GiftCard Report",
+                columns: ReportColumns.giftCard,
+                data: exportData,
+                fileName: "giftcard-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

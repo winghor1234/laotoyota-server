@@ -6,6 +6,7 @@ import { FindOneUser } from "../service/service.js";
 import shortid from "shortid";
 import { getSearchQuery } from "../service/lib.js";
 import { matchedData } from "express-validator";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class BranchController {
 
     static async getAllAdmin(req, res) {
@@ -16,7 +17,7 @@ export default class BranchController {
                 search,
                 startDate,
                 endDate,
-            } = matchedData(req);
+            } = req.query;
             const query = {};
             if (search)
                 query['OR'] = [
@@ -33,7 +34,7 @@ export default class BranchController {
             }
 
 
-            const data = await prisma.branch.findMany({
+            const branch = await prisma.branch.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
@@ -41,9 +42,10 @@ export default class BranchController {
                 skip: (parseInt(page) - 1) * parseInt(limit),
                 take: parseInt(limit),
             });
+            if (!branch) return SendError(res, 404, EMessage.NotFound);
             const count = await prisma.branch.count({ where: query });
             const totalPage = Math.ceil(count / parseInt(limit));
-            return SendSuccess(res, SMessage.SelectAll, { data, totalPage })
+            return SendSuccess(res, SMessage.SelectAll, { data: branch, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
         }
@@ -131,4 +133,38 @@ export default class BranchController {
             return SendError(res, 500, EMessage.ServerInternal, error)
         }
     }
+    static async ExportBranch(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const data = await prisma.branch.findMany({
+                where: {
+                    createdAt: {
+                        gte: new Date(startDate),
+                        lte: new Date(endDate),
+                    },
+                },
+                orderBy: { createdAt: "desc" },
+            });
+            if (!data.length) {
+                return SendError(res, 404, "No data found for this date range");
+            }
+            const exportData = data.map(item => ({
+                BranchCode: item.branch_code,
+                BranchName: item.branch_name,
+                Location: item.location,
+            }));
+
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Branch Report",
+                columns: ReportColumns.branch,
+                data: exportData,
+                fileName: "branch-report.xlsx",
+            });
+        } catch (error) {
+            console.log(error);
+            return SendError(res, 500, EMessage.ServerInternal, error);
+        }
+    }
+
 }

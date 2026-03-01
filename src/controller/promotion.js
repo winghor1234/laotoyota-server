@@ -3,6 +3,7 @@ import { EMessage, SMessage } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { UploadImageToCloud } from "../config/cloudinary.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class PromotionController {
     static async getAllPromotion(req, res) {
         try {
@@ -12,26 +13,27 @@ export default class PromotionController {
                 search,
             } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['title', 'detail'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['title', 'detail'],
-                    search
-                );
+                query['OR'] = [
+                    { title: { contains: search } },
+                ];
             const promotion = await prisma.promotion.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             if (!promotion) return SendError(res, 404, EMessage.NotFound);
-            return {
-                total: await prisma.promotion.count({ where: query }),
-                page,
-                limit,
-                data: promotion
-            }
+            const count = await prisma.promotion.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: promotion, totalPage })
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
@@ -130,6 +132,32 @@ export default class PromotionController {
             return SendSuccess(res, SMessage.Delete)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportPromotion(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.promotion.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                PromotionName: item.title,
+                PromotionDetail: item.detail,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Promotion Report",
+                columns: ReportColumns.promotion,
+                data: exportData,
+                fileName: "promotion-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

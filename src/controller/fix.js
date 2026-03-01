@@ -3,6 +3,7 @@ import { EMessage, SMessage, FixStatus } from "../service/message.js"
 import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneBooking, FindOneZone } from "../service/service.js";
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class FixController {
     static async SearchFix(req, res) {
         try {
@@ -31,33 +32,96 @@ export default class FixController {
                 search,
                 startDate,
                 endDate,
+                status,
             } = req.query;
             const query = {};
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['fixName'],
-                    search
-                );
+                query['OR'] = [
+                    { detailFix: { contains: search } },
+                ];
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
                 if (startDate) query['createdAt']['gte'] = new Date(startDate);
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
+            if (status) {
+                query['fixStatus'] = status;
+            }
             const fix = await prisma.fix.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
+                include: {
+                    booking: {
+                        include: {
+                            car: true,
+                            time: true,
+                            user: true,
+                            branch: true,
+                        },
+                    },
+                    zone: true,
+                },
             });
             if (!fix) return SendError(res, 404, EMessage.NotFound);
-            return SendSuccess(res, SMessage.SelectAll, fix);
+            const count = await prisma.fix.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: fix, totalPage });
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
+    static async getAllFixByBranch(req, res) {
+        try {
+            const branchId = req.params.branch_id;
+            // const { page = 1, limit = 10, search, startDate, endDate } = matchedData(req);
+            const { page = 1, limit = 10, search, startDate, endDate } = req.query;
+            const query = { branchId: branchId };
+            if (search)
+                query['OR'] = [
+                    {
+                        fixStatus: { contains: search },
+                    },
+                ];
+
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+
+            const data = await prisma.booking.findMany({
+                where: query,
+                orderBy: {
+                    createdAt: 'desc',
+                },
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
+                include: {
+                    booking: {
+                        include: {
+                            car: true,
+                            time: true,
+                            user: true,
+                            branch: true,
+                        },
+                    },
+                    zone: true,
+                },
+            });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const count = await prisma.booking.count({ where: query });
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data, totalPage });
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+
     static async SelectAll(req, res) {
         try {
 
@@ -177,6 +241,46 @@ export default class FixController {
             return SendSuccess(res, SMessage.Delete, data)
         } catch (error) {
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportFix(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.fix.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                CustomerName: item.booking.user.username,
+                customerPhone: item.booking.user.phoneNumber,
+                CarModel: item.booking.car.model,
+                CarPlateNumber: item.booking.car.plateNumber,
+                CarEngineNumber: item.booking.car.engineNumber,
+                CarFrameNumber: item.booking.car.frameNumber,
+                BranchName: item.booking.branch.branch_name,
+                Zone: item.booking.zone.zoneName,
+                Time: item.booking.time.time,
+                Date: item.booking.time.date,
+                DetailFix: item.detailFix,
+                KmLast: item.kmLast,
+                KmNext: item.kmNext,
+                FixCarPrice: item.fixCarPrice,
+                CarPartPrice: item.carPartPrice,
+                TotalPrice: item.totalPrice,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Fix Report",
+                columns: ReportColumns.fix,
+                data: exportData,
+                fileName: "fix-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }

@@ -4,7 +4,8 @@ import { SendError, SendCreate, SendSuccess } from "../service/response.js"
 import prisma from "../config/prima.js";
 import { FindOneUser } from "../service/service.js";
 import shortid from "shortid";
-import {matchedData} from "express-validator"
+import { matchedData } from "express-validator"
+import { ExcelBuilder, ReportColumns } from "../service/excelBuilder.js";
 export default class EmployeeController {
     static async SearchEmployee(req, res) {
         try {
@@ -27,7 +28,7 @@ export default class EmployeeController {
             return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
-     static async getAllSuper(req, res) {
+    static async getAllSuper(req, res) {
         try {
             const {
                 page = 1,
@@ -35,13 +36,18 @@ export default class EmployeeController {
                 search,
                 startDate,
                 endDate,
-            } = matchedData(req); 
+            } = req.query;
             const query = {};
+            // if (search)
+            //     query['OR'] = getSearchQuery(
+            //         ['employee_code', 'employee_name','position'],
+            //         search
+            //     );
             if (search)
-                query['OR'] = getSearchQuery(
-                    ['employee_code', 'employee_name','position'],
-                    search
-                );
+                query['OR'] = [
+                    { employee_code: { contains: search } },
+                    { employee_name: { contains: search } },
+                ];
 
             if (startDate || endDate) {
                 query['createdAt'] = {};
@@ -49,21 +55,23 @@ export default class EmployeeController {
                 if (endDate) query['createdAt']['lt'] = new Date(endDate);
             }
 
-          
+
             const employee = await prisma.employee.findMany({
                 where: query,
                 orderBy: {
                     createdAt: 'desc',
                 },
-                skip: (page - 1) * limit,
-                take: limit,
+                skip: (parseInt(page) - 1) * parseInt(limit),
+                take: parseInt(limit),
             });
             const count = await prisma.employee.count({ where: query });
-            return SendSuccess(res,SMessage.SelectAll,{employee,count})
+            const totalPage = Math.ceil(count / parseInt(limit));
+            return SendSuccess(res, SMessage.SelectAll, { data: employee, totalPage })
+            // return SendSuccess(res,SMessage.SelectAll,{employee,count})
         } catch (error) {
             console.log(`employee/getAll error: ${error}`);
-        
-            return SendError(res,500,EMessage.ServerInternal,error)
+
+            return SendError(res, 500, EMessage.ServerInternal, error)
         }
     }
     static async SelectAll(req, res) {
@@ -119,14 +127,14 @@ export default class EmployeeController {
         try {
             const employee_id = req.params.employee_id;
             const { userId, employee_name, position } = req.body;
-            const validate = await ValidateData({ userId,  employee_name, position });
+            const validate = await ValidateData({ userId, employee_name, position });
             if (validate.length > 0) {
                 return SendError(res, 400, EMessage.BadRequest, validate.join(','));
             }
             await FindOneUser(userId);
             const data = await prisma.employee.update({
                 data: {
-                    userId,  employee_name, position
+                    userId, employee_name, position
                 },
                 where: {
                     employee_id: employee_id
@@ -149,6 +157,34 @@ export default class EmployeeController {
         } catch (error) {
             console.log(error);
             return SendError(res, 500, EMessage.ServerInternal, error)
+        }
+    }
+    static async ExportEmployee(req, res) {
+        try {
+            const { startDate, endDate } = req.query;
+            const query = {};
+            if (startDate || endDate) {
+                query['createdAt'] = {};
+                if (startDate) query['createdAt']['gte'] = new Date(startDate);
+                if (endDate) query['createdAt']['lt'] = new Date(endDate);
+            }
+            const data = await prisma.employee.findMany({ where: query });
+            if (!data) return SendError(res, 404, EMessage.NotFound);
+            const exportData = data.map(item => ({
+                EmployeeCode: item.employee_code,
+                EmployeeName: item.employee_name,
+                Position: item.position,
+                Branch: item.branch.branch_name,
+            }));
+            // เรียกใช้ ExcelBuilder
+            return await ExcelBuilder.export(res, {
+                sheetName: "Employee Report",
+                columns: ReportColumns.employee,
+                data: exportData,
+                fileName: "employee-report.xlsx",
+            })
+        } catch (error) {
+            return SendError(res, 500, EMessage.ServerInternal, error);
         }
     }
 }
